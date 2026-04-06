@@ -4,39 +4,81 @@ import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
 
+# PDF
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+
+# ===============================
+# PAGE CONFIG
+# ===============================
+st.set_page_config(page_title="AI Customer Retention System", layout="wide")
+
+# ===============================
+# LOGIN SYSTEM
+# ===============================
+def login():
+    st.title("🔐 Login")
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if user == "admin" and pwd == "1234":
+            st.session_state["login"] = True
+        else:
+            st.error("Invalid credentials")
+
+if "login" not in st.session_state:
+    st.session_state["login"] = False
+
+if not st.session_state["login"]:
+    login()
+    st.stop()
+
+# ===============================
+# UI STYLE
+# ===============================
+st.markdown("""
+<style>
+.main {background-color: #0E1117;}
+h1, h2, h3 {color: #00ADB5;}
+.stButton>button {
+    background-color: #00ADB5;
+    color: white;
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ===============================
 # LOAD MODEL
 # ===============================
 model = joblib.load("churn_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
-st.set_page_config(page_title="Churn Intelligence System", layout="wide")
-
 # ===============================
 # HEADER
 # ===============================
-st.markdown("<h1 style='text-align: center;'>🏦 Churn Intelligence Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("### Predict churn probability and classify customers into risk segments")
+st.title("🏦 AI-Powered Customer Retention System")
+st.markdown("### Predict churn, analyze risk, and take action")
 
 # ===============================
 # SIDEBAR INPUT
 # ===============================
-st.sidebar.header("Customer Input Features")
+st.sidebar.header("Customer Input")
 
 credit_score = st.sidebar.slider("Credit Score", 300, 900, 600)
 age = st.sidebar.slider("Age", 18, 80, 40)
-tenure = st.sidebar.slider("Tenure (Years)", 0, 10, 3)
+tenure = st.sidebar.slider("Tenure", 0, 10, 3)
 balance = st.sidebar.number_input("Balance", 0.0, 250000.0, 50000.0)
-products = st.sidebar.selectbox("Number of Products", [1,2,3,4])
-has_card = st.sidebar.selectbox("Has Credit Card", [0,1])
-active = st.sidebar.selectbox("Is Active Member", [0,1])
-salary = st.sidebar.number_input("Estimated Salary", 10000.0, 200000.0, 50000.0)
-
+products = st.sidebar.selectbox("Products", [1,2,3,4])
+has_card = st.sidebar.selectbox("Credit Card", [0,1])
+active = st.sidebar.selectbox("Active Member", [0,1])
+salary = st.sidebar.number_input("Salary", 10000.0, 200000.0, 50000.0)
 geography = st.sidebar.selectbox("Geography", ["France","Germany","Spain"])
 gender = st.sidebar.selectbox("Gender", ["Male","Female"])
 
 st.sidebar.markdown("---")
-st.sidebar.info("Adjust inputs to simulate customer behavior and predict churn risk.")
+st.sidebar.info("Adjust inputs to simulate customer behavior")
 
 # ===============================
 # FEATURE ENGINEERING
@@ -59,6 +101,26 @@ input_data = np.array([[
 input_data = scaler.transform(input_data)
 
 # ===============================
+# PDF FUNCTION
+# ===============================
+def create_pdf(prob, risk):
+    doc = SimpleDocTemplate("report.pdf")
+    styles = getSampleStyleSheet()
+
+    content = []
+    content.append(Paragraph("Customer Churn Report", styles['Title']))
+    content.append(Paragraph(f"Churn Probability: {prob:.2f}", styles['Normal']))
+    content.append(Paragraph(f"Risk Level: {risk}", styles['Normal']))
+
+    doc.build(content)
+
+# ===============================
+# SESSION STATE FIX
+# ===============================
+if "prob" not in st.session_state:
+    st.session_state["prob"] = None
+
+# ===============================
 # TABS
 # ===============================
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Analysis", "ℹ️ About"])
@@ -71,53 +133,41 @@ with tab1:
     st.header("📊 Customer Risk Dashboard")
 
     if st.button("🔍 Predict Churn Risk"):
+        st.session_state["prob"] = model.predict_proba(input_data)[0][1]
 
-        prob = model.predict_proba(input_data)[0][1]
+    prob = st.session_state["prob"]
 
-        st.success("✅ Model successfully evaluated customer risk")
-        st.markdown("---")
+    if prob is not None:
 
-        # RISK LEVEL
+        # Risk Logic
         if prob > 0.7:
-            risk = "🔴 High Risk"
+            risk = "🔴 High"
             st.error("🚨 High Risk Customer – Immediate Action Required")
         elif prob > 0.4:
-            risk = "🟠 Medium Risk"
+            risk = "🟠 Medium"
             st.warning("⚠️ Medium Risk – Monitor Closely")
         else:
-            risk = "🟢 Low Risk"
+            risk = "🟢 Low"
             st.success("✅ Low Risk – Stable Customer")
 
-        # METRICS
-        col1, col2 = st.columns(2)
+        # Metrics
+        col1, col2, col3 = st.columns(3)
 
-        with col1:
-            st.metric("Churn Probability", f"{prob:.2f}")
+        col1.metric("Churn Probability", f"{prob:.2f}")
+        col2.metric("Risk Level", risk)
+        col3.metric("Engagement Score", engagement_score)
 
-            if prob > 0.7:
-                st.progress(prob, text="High Risk Zone")
-            elif prob > 0.4:
-                st.progress(prob, text="Medium Risk Zone")
-            else:
-                st.progress(prob, text="Low Risk Zone")
+        # Chart
+        st.subheader("📊 Risk Visualization")
 
-        with col2:
-            st.metric("Risk Level", risk)
+        fig, ax = plt.subplots()
+        ax.bar(["Churn Risk"], [prob])
+        ax.set_ylim(0,1)
+        st.pyplot(fig)
 
-        # RECOMMENDATION
-        st.subheader("📌 Recommended Action")
-
-        if prob > 0.7:
-            st.write("• Offer retention bonus")
-            st.write("• Assign relationship manager")
-            st.write("• Reduce service charges")
-        elif prob > 0.4:
-            st.write("• Send personalized offers")
-            st.write("• Increase engagement campaigns")
-        else:
-            st.write("• Maintain current strategy")
-
-                # SMART INSIGHT
+        # ===============================
+        # SMART INSIGHT (FIXED)
+        # ===============================
         st.subheader("🧠 Smart Insight")
 
         if prob > 0.7:
@@ -134,7 +184,7 @@ with tab1:
             elif active == 0:
                 st.info("Improving customer engagement can lower churn risk.")
             else:
-                st.info("Moderate risk detected. Monitor customer behavior.")
+                st.info("Moderate risk detected. Monitor behavior.")
 
         else:
             if products == 1:
@@ -142,23 +192,22 @@ with tab1:
             else:
                 st.success("Strong engagement and product usage indicate a loyal customer.")
 
-    # WHAT-IF
-    st.subheader("📊 What-if Scenario")
+        # Recommendation
+        st.subheader("📌 Recommended Action")
 
-    new_products = st.slider("Adjust Products", 1, 4, products)
-    new_engagement = active + new_products
+        if prob > 0.7:
+            st.write("• Offer retention bonus")
+            st.write("• Assign relationship manager")
+        elif prob > 0.4:
+            st.write("• Increase engagement campaigns")
+        else:
+            st.write("• Maintain strategy")
 
-    whatif_input = np.array([[ 
-        credit_score, age, tenure, balance, new_products,
-        has_card, active, salary,
-        balance_salary_ratio, new_engagement, tenure_age_ratio,
-        geo_germany, geo_spain, gender_male
-    ]])
-
-    whatif_input = scaler.transform(whatif_input)
-    whatif_prob = model.predict_proba(whatif_input)[0][1]
-
-    st.write(f"New Churn Probability: **{whatif_prob:.2f}**")
+        # PDF
+        if st.button("📄 Generate Report"):
+            create_pdf(prob, risk)
+            with open("report.pdf", "rb") as f:
+                st.download_button("Download Report", f, "report.pdf")
 
 # ===============================
 # ANALYSIS
@@ -167,7 +216,11 @@ with tab2:
 
     st.header("📈 Model Analysis")
 
-    importance = model.feature_importances_
+    if hasattr(model, "feature_importances_"):
+        importance = model.feature_importances_
+    else:
+        importance = np.abs(model.coef_[0])
+
     features = [
         "CreditScore","Age","Tenure","Balance","Products",
         "HasCard","Active","Salary","BalanceSalaryRatio",
@@ -181,8 +234,6 @@ with tab2:
     imp_df.plot(kind='barh', ax=ax)
     st.pyplot(fig)
 
-    st.info("Customers with low engagement & fewer products show higher churn risk.")
-
 # ===============================
 # ABOUT
 # ===============================
@@ -193,14 +244,14 @@ with tab3:
     st.write("""
     This project predicts customer churn using machine learning.
 
-    Key Highlights:
-    • Feature engineering (Engagement Score, Ratios)  
-    • Risk segmentation (High / Medium / Low)  
-    • What-if simulation  
-    • Streamlit deployment  
+    Key Features:
+    • Feature engineering  
+    • Risk segmentation  
+    • What-if analysis  
+    • Dashboard visualization  
 
     Business Value:
-    Helps banks reduce churn by targeting high-risk customers early.
+    Helps banks reduce churn by targeting high-risk customers.
     """)
 
 # ===============================
@@ -211,15 +262,9 @@ st.markdown("---")
 st.subheader("📊 Risk Interpretation Guide")
 
 st.write("""
-🔴 High Risk (>0.7): Immediate retention required  
-🟠 Medium Risk (0.4–0.7): Monitor and engage  
+🔴 High Risk (>0.7): Immediate action required  
+🟠 Medium Risk (0.4–0.7): Monitor closely  
 🟢 Low Risk (<0.4): Stable customers  
 """)
 
-st.subheader("🧠 Business Impact")
-
-st.write("""
-Improves Customer Lifetime Value, Revenue Stability, and Marketing ROI.
-""")
-
-st.caption("⚠️ This system is designed to assist decision-making, not replace human judgment.")
+st.caption("⚠️ AI system for decision support only")
